@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local run outputs
+output/
+outputs/
+dockerout/
+cwl_output*/
+cwl_test_out/

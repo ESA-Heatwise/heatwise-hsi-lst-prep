@@ -1,0 +1,13 @@
+# Keep the build context minimal; data/ and examples/ MUST stay included
+# (the image bakes them in via COPY . . for the Docker/CWL config variants).
+.git/
+.gitignore
+__pycache__/
+*.py[cod]
+output/
+outputs/
+dockerout/
+cwl_output*/
+cwl_test_out/
+.vscode/
+.idea/

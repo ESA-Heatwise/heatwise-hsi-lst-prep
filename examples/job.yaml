@@ -1,0 +1,7 @@
+config:
+  class: File
+  path: run_all_config_docker.yaml
+input_catalog:
+  class: File
+  path: stac_input/catalog_docker.json
+output_dir: output

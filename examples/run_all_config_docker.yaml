@@ -1,0 +1,32 @@
+# Docker/CWL variant of run_all_config.yaml: every path referenced *inside*
+# this file must be an absolute /app/... path (pointing into the image,
+# baked in via `COPY . .`), because cwltool runs the container with its own
+# empty per-job working directory, not the image's Dockerfile WORKDIR --
+# relative paths like `./data/...` would not resolve.
+#
+# Use with examples/stac_input/catalog_docker.json (also absolute paths) via:
+#   cd examples && cwltool ../heatwise_hsi_lst_prep.cwl job.yaml
+#
+# For local/non-Docker runs, use run_all_config.yaml + stac_input/catalog.json
+# instead (relative paths, simpler to read/copy).
+output_dir: output
+wavelength_file: /app/data/CHIME_v2_wavelengths_um.txt
+process_lst: true
+process_pca: false
+sharpen_method: linear
+
+band_trim_default:
+  mode: keep
+  ranges: "6-71,188-245"
+
+lst_default:
+  band: 7
+  normalization: zscore
+
+band_selection:
+  keep_ranges: [[6, 71], [188, 245]]
+  target_bands: 30
+  target_clusters: 55
+  vote_threshold: 0.5
+  smoothness_cut_pct: 95
+  n_sample: 20000

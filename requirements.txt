@@ -1,0 +1,6 @@
+rasterio
+numpy
+scipy
+affine
+scikit-learn
+pyyaml

@@ -1,0 +1,28 @@
+# Minimal example config for the sample data under data/Berlin/.
+# Run from the repo root:
+#   python processor.py run-all --config examples/run_all_config.yaml \
+#       --input-catalog examples/stac_input/catalog.json
+#
+# `cities:` is intentionally omitted here -- with --input-catalog given, the
+# city list (name + hsi/s2/lst paths) is loaded from the STAC catalog instead.
+output_dir: ./output
+wavelength_file: ./data/CHIME_v2_wavelengths_um.txt
+process_lst: true
+process_pca: false
+sharpen_method: linear
+
+band_trim_default:
+  mode: keep
+  ranges: "6-71,188-245"
+
+lst_default:
+  band: 7
+  normalization: zscore
+
+band_selection:
+  keep_ranges: [[6, 71], [188, 245]]
+  target_bands: 30
+  target_clusters: 55
+  vote_threshold: 0.5
+  smoothness_cut_pct: 95
+  n_sample: 20000

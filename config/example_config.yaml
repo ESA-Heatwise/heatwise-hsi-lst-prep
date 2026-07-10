@@ -1,0 +1,61 @@
+# Example run-all config for `python processor.py run-all --config <this file>`
+output_dir: /mnt/d/LXM/Phd/Research/HEATWISE/CHIME/output/heatwise-hsi-lst-prep-run
+wavelength_file: /mnt/d/LXM/Phd/Research/HEATWISE/CHIME/CHIME_v2_wavelengths_um.txt
+process_lst: true
+process_pca: true       # also produce a parallel PCA-reduced HSI (03_hsi_final/hsi_pca/)
+sharpen_method: linear   # linear (ridge) or rf (random forest)
+
+band_selection:
+  keep_ranges: [[6, 71], [188, 245]]   # 1-based ranges kept from the ORIGINAL raw band count
+  target_bands: 30
+  target_clusters: 55
+  vote_threshold: 0.5
+  smoothness_cut_pct: 95
+  n_sample: 20000
+
+pca:
+  standardize: false     # false = covariance PCA (mean-center only, typical for hyperspectral)
+  var_threshold: 0.999   # keep components up to this cumulative explained variance
+  max_components: 30
+  sample_per_city: 80000
+  sample_max_dim: 700
+  block_rows: 128        # transform block size (rows) to bound memory on large scenes
+
+cities:
+  - name: Athens
+    hsi: /path/to/AthensCenter_CHIME_Thermopolis_v2.tif
+    band_trim:
+      mode: keep            # keep | remove
+      ranges: "6-71,188-245"
+    s2: /path/to/Sentinel-2/Athens.tif
+    lst:
+      # Athens has several dated/day-night acquisitions in LSTM_images_v2/ instead of one
+      # merged file like Berlin/Helsinki; this one's bounds match AthensCenter's HSI extent.
+      # Swap in a different Athens_Center_LSTM_Thermopolis_*_50m.tif if you want another date/time.
+      input: /path/to/Athens_Center_LSTM.tif
+      band: 7
+      normalization: zscore   # zscore | fixed_scale
+
+  - name: Berlin
+    hsi: /path/to/Berlin_CHIME_BUG_v2.tif
+    band_trim:
+      mode: keep
+      ranges: "6-71,188-245"
+    s2: /path/to/Sentinel-2/Berlin.tif
+    lst:
+      input: /path/to/Berlin_LSTM_50m_v2.tif
+      band: 7
+      normalization: fixed_scale
+      kelvin_offset: 273.15
+      fixed_scale: 50.0
+
+  - name: Helsinki
+    hsi: /path/to/Helsinki_CHIME_ENMAP_v2.tif
+    band_trim:
+      mode: keep              # raw file has 250 bands too, same as Athens/Berlin
+      ranges: "6-71,188-245"
+    s2: /path/to/Sentinel-2/Helsinki.tif
+    lst:
+      input: /path/to/LSTM_images_v2/Helsinki_LSTM_50m.tif
+      band: 7
+      normalization: zscore

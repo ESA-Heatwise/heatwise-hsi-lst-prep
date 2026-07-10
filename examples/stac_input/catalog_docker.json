@@ -1,0 +1,9 @@
+{
+  "type": "Catalog",
+  "stac_version": "1.0.0",
+  "id": "heatwise-hsi-lst-prep-sample-input-docker",
+  "description": "Docker/CWL variant of catalog.json: the item link is an absolute /app/... path baked into the image, since cwltool only stages this catalog.json file itself (not its siblings) -- see heatwise_hsi_lst_prep.cwl's doc on `input_catalog` for why.",
+  "links": [
+    {"rel": "item", "href": "/app/examples/stac_input/Berlin_item_docker.json", "type": "application/json"}
+  ]
+}
