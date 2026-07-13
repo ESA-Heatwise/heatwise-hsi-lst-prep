@@ -72,13 +72,16 @@ internal folder layout.
 
 ## Sample data
 
-`data/Berlin/` holds a small (~5 MB), fully-valid 64x64-pixel crop of the
-Berlin HSI (all 250 raw bands, so `trim-bands` behaves identically to
-production data) plus matching Sentinel-2 and LST crops (300 m buffer around
-the HSI footprint), for quick local/CI testing without the full-size
-production rasters. `examples/stac_input/` is a ready-to-use STAC input
-catalog pointing at it, and `examples/run_all_config.yaml` a matching config.
-Run from the repo root:
+`examples/stac_input/` holds a fully-valid crop of the Berlin scene clipped
+to the HEATWISE sample boundary (~5.4 x 8.1 km): `Berlin_CHIME.tif` (all 250
+raw bands at 30 m, so `trim-bands` behaves identically to production data),
+`Berlin_S2.tif` (10-band Sentinel-2 at 10 m) and `Berlin_LSTM.tif` (7-band
+LST source at 50 m), ~57 MB in total. The extent covers all 8 labelled LCZ
+classes of the Berlin sample labels used downstream, so the full pipeline
+produces meaningful training patches from it. `catalog.json` /
+`Berlin_item.json` form a ready-to-use STAC input catalog pointing at these
+rasters, and `examples/run_all_config.yaml` is a matching config. Run from
+the repo root:
 
 ```bash
 python processor.py run-all --config examples/run_all_config.yaml \
@@ -86,7 +89,7 @@ python processor.py run-all --config examples/run_all_config.yaml \
 ```
 
 This exercises the whole pipeline (trim -> sharpen -> band selection ->
-apply -> LST -> STAC output) end to end in well under a minute.
+apply -> LST -> STAC output) end to end in a few minutes.
 
 ## Run individual steps
 
@@ -148,13 +151,13 @@ versioned tag, matching the CWL's `dockerPull`), so local tests exercise the
 exact tag that will later be pushed to the registry:
 
 ```bash
-docker build -t ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.0 .
+docker build -t ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1 .
 
 docker run --rm \
   -v "$(pwd)/examples:/app/examples" \
   -v "$(pwd)/data:/app/data" \
   -v /path/to/host/output:/app/output \
-  ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.0 \
+  ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1 \
   run-all --config examples/run_all_config.yaml \
           --input-catalog examples/stac_input/catalog.json \
           --output-dir /app/output
@@ -213,4 +216,4 @@ Docker.
 > **Rebuild the image before testing this** if you already built it before
 > `run_all_config_docker.yaml`/`catalog_docker.json`/`Berlin_item_docker.json`
 > existed -- they need to be baked in via `COPY . .`:
-> `docker build -t ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.0 .`
+> `docker build -t ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1 .`

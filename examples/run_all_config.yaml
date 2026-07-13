@@ -1,4 +1,4 @@
-# Minimal example config for the sample data under data/Berlin/.
+# Minimal example config for the sample data under examples/stac_input/.
 # Run from the repo root:
 #   python processor.py run-all --config examples/run_all_config.yaml \
 #       --input-catalog examples/stac_input/catalog.json

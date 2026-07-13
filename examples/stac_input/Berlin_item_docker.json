@@ -7,17 +7,17 @@
   "bbox": null,
   "assets": {
     "hyperspectral_image": {
-      "href": "/app/examples/stac_input/Berlin_CHIME_BUG_v2_sample.tif",
+      "href": "/app/examples/stac_input/Berlin_CHIME.tif",
       "type": "image/tiff; application=geotiff",
       "roles": ["data"]
     },
     "sentinel2": {
-      "href": "/app/examples/stac_input/Berlin_S2_2024-10-24_sample.tif",
+      "href": "/app/examples/stac_input/Berlin_S2.tif",
       "type": "image/tiff; application=geotiff",
       "roles": ["data"]
     },
     "lst_source": {
-      "href": "/app/examples/stac_input/Berlin_LSTM_50m_v2_sample.tif",
+      "href": "/app/examples/stac_input/Berlin_LSTM.tif",
       "type": "image/tiff; application=geotiff",
       "roles": ["data"]
     }

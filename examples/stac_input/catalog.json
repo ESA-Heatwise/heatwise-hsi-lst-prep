@@ -2,7 +2,7 @@
   "type": "Catalog",
   "stac_version": "1.0.0",
   "id": "heatwise-hsi-lst-prep-sample-input",
-  "description": "Sample input catalog for the minimal Berlin test data under data/Berlin/",
+  "description": "Sample input catalog for the Berlin test data under examples/stac_input/",
   "links": [
     {"rel": "item", "href": "Berlin_item.json", "type": "application/json"}
   ]
