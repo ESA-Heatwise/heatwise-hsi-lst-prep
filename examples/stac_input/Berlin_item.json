@@ -4,7 +4,7 @@
   "id": "Berlin",
   "properties": {"datetime": null},
   "geometry": null,
-  "bbox": null,
+  "links": [],
   "assets": {
     "hyperspectral_image": {
       "href": "Berlin_CHIME.tif",
