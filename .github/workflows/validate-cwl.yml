@@ -1,4 +1,4 @@
-name: Validate CWL
+name: Validate and test CWL
 
 on:
   push:
@@ -6,11 +6,17 @@ on:
       - eoap-compliance
     paths:
       - "heatwise_hsi_lst_prep.cwl"
+      - "Dockerfile"
+      - "processor.py"
+      - "requirements.txt"
+      - "src/**"
+      - "data/**"
+      - "examples/**"
       - ".github/workflows/validate-cwl.yml"
   workflow_dispatch:
 
 jobs:
-  validate-cwl:
+  validate-and-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -27,3 +33,26 @@ jobs:
 
       - name: Validate CWL
         run: cwltool --validate heatwise_hsi_lst_prep.cwl
+
+      - name: Build processor Docker image
+        run: |
+          docker build \
+            -t ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1 \
+            .
+
+      - name: Run CWL example
+        run: |
+          mkdir -p cwl-output
+          cwltool \
+            --outdir cwl-output \
+            heatwise_hsi_lst_prep.cwl \
+            examples/job.yaml
+
+      - name: Show generated outputs
+        if: always()
+        run: |
+          echo "=== Generated files ==="
+          find cwl-output -maxdepth 5 -type f -print | sort || true
+
+          echo "=== STAC catalogs ==="
+          find cwl-output -name catalog.json -print || true
