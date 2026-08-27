@@ -28,11 +28,24 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install cwltool
-        run: python -m pip install --upgrade pip cwltool
+      - name: Install validation tools
+        run: python -m pip install --upgrade pip cwltool pystac
 
       - name: Validate CWL
         run: cwltool --validate heatwise_hsi_lst_prep.cwl
+
+      - name: Validate input STAC
+        run: |
+          python - <<'PY'
+          import pystac
+
+          catalog = pystac.Catalog.from_file(
+              "examples/stac_input/catalog.json"
+          )
+
+          catalog.validate_all()
+          print("Input STAC is valid.")
+          PY
 
       - name: Build processor Docker image
         run: |
@@ -47,6 +60,25 @@ jobs:
             --outdir cwl-output \
             heatwise_hsi_lst_prep.cwl \
             examples/job.yaml
+
+      - name: Validate output STAC
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pystac
+
+          catalogs = list(Path("cwl-output").rglob("catalog.json"))
+
+          if not catalogs:
+              raise RuntimeError("No output catalog.json was generated")
+
+          for catalog_path in catalogs:
+              print(f"Validating {catalog_path}")
+              catalog = pystac.Catalog.from_file(str(catalog_path))
+              catalog.validate_all()
+
+          print("Output STAC is valid.")
+          PY
 
       - name: Show generated outputs
         if: always()
