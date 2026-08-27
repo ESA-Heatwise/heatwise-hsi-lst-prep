@@ -54,7 +54,8 @@ $graph:
         label: output directory
         default: "."
         doc: |
-          Output directory name created inside the CWL working directory.
+          Output directory path relative to the CWL working directory.
+          By default, products are written directly to the working directory.
 
     steps:
 
@@ -130,9 +131,10 @@ $graph:
       output_dir:
         type: string
         label: output directory
-        default: output
+        default: "."
         doc: |
-          Output directory name created inside the CWL working directory.
+          Output directory path relative to the CWL working directory.
+          By default, products are written directly to the working directory.
         inputBinding:
           prefix: --output-dir
 
@@ -146,7 +148,3 @@ $graph:
           STAC catalog.
         outputBinding:
           glob: "."
-    type: Directory
-    outputBinding:
-      glob: $(inputs.output_dir)
-    doc: Full output directory (trimmed/sharpened intermediates, hsi_bs/hsi_pca/lst finals, band_selection.json, pca_model.*, STAC items).
