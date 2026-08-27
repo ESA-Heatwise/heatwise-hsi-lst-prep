@@ -104,7 +104,7 @@ def write_output_catalog(
     output_dir: str | Path,
     items: dict[str, dict[str, str | Path]],
     processor_name: str = "heatwise-hsi-lst-prep",
-    processor_version: str = "0.1.0",
+    processor_version: str = "0.1.1",
 ) -> Path:
     """Write one <item_id>_item.json per entry of `items`, plus a root catalog.json
     linking to all of them. `items` = {item_id: {asset_name: file_path}}.
@@ -117,14 +117,17 @@ def write_output_catalog(
         item = {
             "type": "Feature",
             "stac_version": STAC_VERSION,
+            "stac_extensions": [
+                "https://stac-extensions.github.io/processing/v1.2.0/schema.json"
+            ],
             "id": item_id,
             "properties": {
                 "datetime": datetime.now(timezone.utc).isoformat(),
-                "processing:software": processor_name,
-                "processing:version": processor_version,
+                "processing:software": {
+                    processor_name: processor_version
+                },
             },
             "geometry": None,
-            "bbox": None,
             "links": [],
             "assets": {},
         }
