@@ -52,7 +52,7 @@ $graph:
       - id: output_dir
         type: string
         label: output directory
-        default: output
+        default: "."
         doc: |
           Output directory name created inside the CWL working directory.
 
