@@ -1,79 +1,151 @@
 cwlVersion: v1.2
-class: CommandLineTool
 
-label: HEATWISE HSI/LST Preprocessing
-doc: >
-  EOAP-compatible HEATWISE HSI/LST preprocessing processor. Runs the full
-  per-city pipeline (band trim -> sharpen -> cross-city band selection ->
-  apply -> optional cross-city PCA -> optional LST) driven by a YAML config,
-  optionally sourcing per-city inputs from a STAC input catalog, and always
-  writes an output STAC catalog describing the products.
+$namespaces:
+  s: https://schema.org/
 
-requirements:
-  DockerRequirement:
-    # Release-shaped image reference. Before publishing, build/tag this
-    # image locally with the same name so local cwltool runs exercise the
-    # exact tag that will later be pushed to the registry.
-    dockerImageId: ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1
-    dockerPull: ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1
+s:softwareVersion: 0.1.1
+s:version: 0.1.1
 
-baseCommand: python
-arguments:
-  # Absolute path: cwltool runs the container with its OWN working directory
-  # (an empty per-job staging directory), not the image's Dockerfile WORKDIR,
-  # so a bare relative `processor.py` is not found. Confirmed by an actual
-  # cwltool run (`python: can't open file '/<job-tmp>/processor.py'`).
-  - /app/processor.py
-  - run-all
+schemas:
+  - http://schema.org/version/9.0/schemaorg-current-http.rdf
 
-inputs:
-  config:
-    type: File
-    inputBinding:
-      prefix: --config
-    doc: >
-      Run-level YAML config (process_lst/process_pca, band_selection/pca
-      params, wavelength_file, cities or STAC defaults). Any path *inside*
-      this YAML (e.g. wavelength_file) must be an absolute /app/... path
-      pointing into the image, not a relative one -- see the note on
-      `input_catalog` below for why. examples/run_all_config_docker.yaml is
-      written this way; examples/run_all_config.yaml (relative paths) is for
-      local/non-Docker runs only.
+$graph:
 
-  input_catalog:
-    type: File?
-    inputBinding:
-      prefix: --input-catalog
-    doc: >
-      Optional STAC catalog.json listing per-city input assets
-      (hyperspectral_image/sentinel2/lst_source). Overrides the config's
-      `cities:` list if given. cwltool only stages the exact File given
-      here -- it does NOT bring along sibling item JSON files or the
-      rasters they reference (tried declaring them as `secondaryFiles`;
-      confirmed by an actual cwltool run that this does not work the way a
-      naive glob pattern would suggest). So for CWL use, the catalog's item
-      link and every asset href must be an ABSOLUTE /app/... path pointing
-      into the image (already baked in via `COPY . .`), not a relative
-      path resolved next to the staged catalog.json. See
-      examples/stac_input/catalog_docker.json for a working example;
-      examples/stac_input/catalog.json (relative hrefs) is for local
-      /non-Docker runs only.
+  # -------------------------------------------------------------------------
+  # Main EOAP Workflow
+  # -------------------------------------------------------------------------
+  - class: Workflow
+    id: main
+    label: HEATWISE HSI/LST Preprocessing Workflow
+    doc: |
+      EOAP-compatible HEATWISE HSI/LST preprocessing workflow.
 
-  output_dir:
-    type: string
-    default: output
-    inputBinding:
-      prefix: --output-dir
-    doc: Output directory name (created under the CWL working directory).
+      The workflow runs the per-city preprocessing chain used by the
+      HEATWISE LCZ mapping workflow, including hyperspectral band trimming,
+      sharpening, cross-city band selection and application, optional
+      cross-city PCA, and optional LST processing.
 
-outputs:
-  output_catalog:
-    type: File
-    outputBinding:
-      glob: $(inputs.output_dir)/catalog.json
-    doc: Root STAC catalog describing every produced item (per-city + shared).
+      EO input products are provided through a staged STAC catalog directory.
+      The processor generates the corresponding preprocessing products and
+      an output STAC catalog describing the EO products.
 
-  output_directory:
+    requirements: []
+
+    inputs:
+
+      - id: config
+        type: File
+        label: processing configuration
+        doc: |
+          Run-level YAML configuration controlling the HSI/LST preprocessing
+          workflow, including LST/PCA processing options, band-selection and
+          PCA parameters, wavelength information, and city configuration.
+
+      - id: input_catalog
+        type: Directory
+        label: input STAC catalog
+        doc: |
+          Directory containing a STAC catalog named catalog.json referencing
+          the staged EO input products required by the preprocessing workflow,
+          such as hyperspectral imagery, Sentinel-2 imagery, and LST products.
+
+      - id: output_dir
+        type: string
+        label: output directory
+        default: output
+        doc: |
+          Output directory name created inside the CWL working directory.
+
+    steps:
+
+      processor:
+        run: "#hsi_lst_prep_processor"
+
+        in:
+          config: config
+          input_catalog: input_catalog
+          output_dir: output_dir
+
+        out:
+          - output
+
+    outputs:
+
+      output:
+        type: Directory
+        outputSource: processor/output
+
+
+  # -------------------------------------------------------------------------
+  # HSI/LST preprocessing CommandLineTool
+  # -------------------------------------------------------------------------
+  - class: CommandLineTool
+    id: hsi_lst_prep_processor
+    label: HEATWISE HSI/LST Preprocessing Processor
+    doc: |
+      HEATWISE HSI/LST preprocessing processor used by the LCZ mapping
+      workflow.
+
+      The processor executes the complete preprocessing chain using the
+      supplied YAML configuration and the EO products referenced by the
+      input STAC catalog.
+
+    requirements:
+
+      DockerRequirement:
+        dockerPull: ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1
+
+      InlineJavascriptRequirement: {}
+
+    baseCommand: python
+
+    arguments:
+      - /app/processor.py
+      - run-all
+
+    inputs:
+
+      config:
+        type: File
+        label: processing configuration
+        doc: |
+          Run-level YAML configuration controlling the HSI/LST preprocessing
+          workflow.
+        inputBinding:
+          prefix: --config
+
+      input_catalog:
+        type: Directory
+        label: input STAC catalog
+        doc: |
+          Directory containing catalog.json and the associated STAC Items and
+          Assets for the staged EO input products.
+
+          The path to catalog.json inside this directory is passed to the
+          processor through the --input-catalog argument.
+        inputBinding:
+          prefix: --input-catalog
+          valueFrom: $(self.path + "/catalog.json")
+
+      output_dir:
+        type: string
+        label: output directory
+        default: output
+        doc: |
+          Output directory name created inside the CWL working directory.
+        inputBinding:
+          prefix: --output-dir
+
+    outputs:
+
+      output:
+        type: Directory
+        doc: |
+          Complete CWL working directory containing all files produced by the
+          processor, including the preprocessing products and the generated
+          STAC catalog.
+        outputBinding:
+          glob: "."
     type: Directory
     outputBinding:
       glob: $(inputs.output_dir)
