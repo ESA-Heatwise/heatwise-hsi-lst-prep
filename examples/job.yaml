@@ -4,4 +4,4 @@ config:
 input_catalog:
   class: Directory
   path: stac_input
-output_dir: output
+output_dir: "."
