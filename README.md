@@ -16,11 +16,13 @@ Stage 1 of the HEATWISE pipeline: turns raw per-city HSI (CHIME-like) + Sentinel
 Works on one or many cities in a single run; no path is hardcoded in the source —
 everything is passed via CLI flags or a YAML config.
 
+
 ## Install
 
 ```bash
 pip install -r requirements.txt
 ```
+
 
 ## Run the full pipeline for several cities
 
@@ -33,7 +35,8 @@ Copy `config/example_config.yaml`, point it at your own data, and set
 PCA branches on or off for the whole run independently.
 
 Output layout under `output_dir`:
-```
+
+```text
 01_trimmed/<city>_trimmed.tif              # common-band 30m HSI
 02_sharpened_10m/<city>_..._sharp10m.tif
 band_selection.json                        # cross-city voted band indices
@@ -41,8 +44,9 @@ pca_model.npz / pca_model.json             # cross-city PCA model (only if proce
 03_hsi_final/hsi_bs/<city>_hsi_bs.tif      # final band-selected 10m HSI
 03_hsi_final/hsi_pca/<city>_hsi_pca.tif    # final PCA-reduced 10m HSI (only if process_pca)
 04_lst_final/<city>_lst_final.tif          # final normalized 10m LST (+ .json sidecar)
-catalog.json + <city>_item.json + shared_item.json   # STAC output catalogue (always written)
+catalog.json + <city>_item.json + shared_item.json   # STAC output catalog (always written)
 ```
+
 
 ## STAC input/output
 
@@ -50,170 +54,424 @@ catalog.json + <city>_item.json + shared_item.json   # STAC output catalogue (al
 addition to) the `cities:` list in the YAML config:
 
 ```bash
-python processor.py run-all --config config/example_config.yaml \
+python processor.py run-all \
+  --config config/example_config.yaml \
   --input-catalog examples/stac_input/catalog.json
 ```
 
-The input catalog is a root `catalog.json` with one `rel: item` link per city;
-each item's `assets` must contain `hyperspectral_image` and `sentinel2`, and
-may contain `lst_source` (read only if `process_lst: true`). The item `id`
-becomes the city name. Shared per-run settings (`band_trim` mode/ranges, LST
-band/normalization) come from the config's `band_trim_default:` /
-`lst_default:` blocks, since STAC items don't currently carry per-city
-overrides for these. `--input-catalog` (or the config's `input_catalog:` key)
-overrides any `cities:` list already in the config.
+The input catalog is a root `catalog.json` with one `rel: item` link per city.
 
-Regardless of how inputs were supplied, `run-all` **always** writes an output
-STAC catalog (`catalog.json` + one `<city>_item.json` per city + a
-`shared_item.json` for cross-city artifacts like `band_selection.json` /
-`pca_model.npz`) at the root of `output_dir`, so a platform or the next
-chained processor can discover the products without knowing this repo's
-internal folder layout.
+Each STAC Item must contain the following assets:
+
+- `hyperspectral_image`
+- `sentinel2`
+
+and may additionally contain:
+
+- `lst_source`
+
+The `lst_source` asset is read only if `process_lst: true`.
+
+The Item `id` becomes the city name. Shared per-run settings such as band
+trimming and LST processing are read from the configuration file through the
+`band_trim_default:` and `lst_default:` blocks.
+
+If `--input-catalog` is supplied, the STAC-defined city inputs take precedence
+over a `cities:` list already present in the configuration.
+
+Regardless of how inputs are supplied, `run-all` always writes an output STAC
+catalog at the root of `output_dir`. The output includes:
+
+```text
+catalog.json
+<city>_item.json
+shared_item.json
+```
+
+The city Items reference the generated EO products, while `shared_item.json`
+describes cross-city artifacts such as `band_selection.json` and, when PCA is
+enabled, the PCA model files.
+
+This allows a platform or a downstream processor to discover the generated
+products without depending on the internal output directory structure.
+
 
 ## Sample data
 
-`examples/stac_input/` holds a fully-valid crop of the Berlin scene clipped
-to the HEATWISE sample boundary (~5.4 x 8.1 km): `Berlin_CHIME.tif` (all 250
-raw bands at 30 m, so `trim-bands` behaves identically to production data),
-`Berlin_S2.tif` (10-band Sentinel-2 at 10 m) and `Berlin_LSTM.tif` (7-band
-LST source at 50 m), ~57 MB in total. The extent covers all 8 labelled LCZ
-classes of the Berlin sample labels used downstream, so the full pipeline
-produces meaningful training patches from it. `catalog.json` /
-`Berlin_item.json` form a ready-to-use STAC input catalog pointing at these
-rasters, and `examples/run_all_config.yaml` is a matching config. Run from
-the repo root:
+`examples/stac_input/` contains a cropped Berlin sample covering the HEATWISE
+sample boundary (~5.4 x 8.1 km):
+
+```text
+Berlin_CHIME.tif
+Berlin_S2.tif
+Berlin_LSTM.tif
+Berlin_item.json
+catalog.json
+```
+
+The sample products are:
+
+- `Berlin_CHIME.tif`: 250-band CHIME-like hyperspectral input at 30 m.
+- `Berlin_S2.tif`: 10-band Sentinel-2 input at 10 m, used for sharpening.
+- `Berlin_LSTM.tif`: 7-band LST source at 50 m.
+
+The extent covers all 8 labelled LCZ classes of the Berlin sample labels used
+downstream, allowing the complete pipeline to produce meaningful training
+patches.
+
+`catalog.json` and `Berlin_item.json` form the STAC input catalog and use
+relative links to the bundled raster assets.
+
+For a direct local Python run from the repository root:
 
 ```bash
-python processor.py run-all --config examples/run_all_config.yaml \
+python processor.py run-all \
+  --config examples/run_all_config.yaml \
   --input-catalog examples/stac_input/catalog.json
 ```
 
-This exercises the whole pipeline (trim -> sharpen -> band selection ->
-apply -> LST -> STAC output) end to end in a few minutes.
+This exercises the complete preprocessing chain:
+
+```text
+trim
+  -> sharpen
+  -> band selection
+  -> band application
+  -> LST processing
+  -> STAC output
+```
+
 
 ## Run individual steps
 
 ```bash
 # 1. Trim bands (keep-ranges XOR remove-ranges)
-python processor.py trim-bands --input raw.tif --output trimmed.tif --keep-ranges "6-71,188-245"
+python processor.py trim-bands \
+  --input raw.tif \
+  --output trimmed.tif \
+  --keep-ranges "6-71,188-245"
 
 # 2. Sharpen 30m -> 10m with Sentinel-2
-python processor.py sharpen --hsi trimmed.tif --s2 s2.tif --output-dir sharpened/ --method linear
+python processor.py sharpen \
+  --hsi trimmed.tif \
+  --s2 s2.tif \
+  --output-dir sharpened/ \
+  --method linear
 
 # 3. Cross-city band selection (needs >=1 city, ideally several)
 python processor.py select-bands \
   --inputs Athens=athens_trimmed.tif Berlin=berlin_trimmed.tif \
   --wavelength-file CHIME_v2_wavelengths_um.txt \
-  --output-json band_selection.json --target-bands 30
+  --output-json band_selection.json \
+  --target-bands 30
 
 # 4. Apply the selection to a sharpened image
-python processor.py apply-bands --input sharpened.tif --selection-json band_selection.json --output hsi_bs.tif
+python processor.py apply-bands \
+  --input sharpened.tif \
+  --selection-json band_selection.json \
+  --output hsi_bs.tif
 
-# 5. Cross-city PCA fit (needs >=1 city, ideally several; fit on sharpened images)
+# 5. Cross-city PCA fit (needs >=1 city, ideally several)
 python processor.py pca-fit \
   --inputs Athens=athens_sharp10m.tif Berlin=berlin_sharp10m.tif \
-  --output-prefix pca_model --max-components 30
+  --output-prefix pca_model \
+  --max-components 30
 
 # 6. Apply the PCA model to a sharpened image
-python processor.py pca-apply --input sharpened.tif --model pca_model.npz --output hsi_pca.tif
+python processor.py pca-apply \
+  --input sharpened.tif \
+  --model pca_model.npz \
+  --output hsi_pca.tif
 
 # 7. LST resample + normalize
-python processor.py lst --input lstm.tif --band 7 --ref-grid hsi_bs.tif --output lst_final.tif --normalization zscore
+python processor.py lst \
+  --input lstm.tif \
+  --band 7 \
+  --ref-grid hsi_bs.tif \
+  --output lst_final.tif \
+  --normalization zscore
 ```
+
 
 ## Notes
 
-- `select-bands` and `pca-fit` are both inherently cross-city (voting/fitting
-  needs several scenes); in `run-all` each runs once after all cities have
-  been sharpened, then `apply-bands`/`pca-apply` run per city. `hsi_bs` and
-  `hsi_pca` are two independent, parallel reductions of the same sharpened
-  10m HSI — use whichever (or both) downstream in `heatwise-patch-extraction`.
-- LST normalization is a parameter, not a per-city hardcoded branch: `zscore`
-  computes mean/std from the current scene's valid pixels (stored in the
-  output `.json` sidecar for reproducibility); `fixed_scale` uses a fixed
-  physical scale `(K - kelvin_offset) / fixed_scale` independent of scene
-  statistics.
-- `band_trim` supports two input styles for specifying which bands survive:
-  `keep-ranges` (list the bands to keep) or `remove-ranges` (list the bands to
-  drop). Both operate on the raw band count of whatever file you point at —
-  neither implies a specific upstream product. **All cities that will be
-  pooled together in `select-bands`/`pca-fit` must end up with the same band
-  count and the same keep/remove ranges**, otherwise band index `i` means a
-  different wavelength in each city and cross-city voting/PCA will silently
-  mix incompatible bands (or crash on array-shape mismatches once band counts
-  differ, as in `pca-fit`). Check each raw file's band count first
-  (`rasterio.open(path).count`) before deciding per-city `band_trim` settings.
+- `select-bands` and `pca-fit` are both inherently cross-city operations.
+  Voting/fitting is performed after all participating scenes have been
+  sharpened. `apply-bands` and `pca-apply` then run independently for each
+  city.
+
+- `hsi_bs` and `hsi_pca` are two independent dimensionality-reduction routes
+  applied to the same sharpened 10 m HSI. Either or both may be consumed by
+  the downstream `heatwise-patch-extraction` processor.
+
+- LST normalization is configured rather than hardcoded per city. `zscore`
+  computes mean and standard deviation from the current scene's valid pixels
+  and records them in the output JSON sidecar. `fixed_scale` instead applies:
+
+  ```text
+  (K - kelvin_offset) / fixed_scale
+  ```
+
+- `band_trim` supports two alternative input styles:
+  - `keep-ranges`: list the bands to retain.
+  - `remove-ranges`: list the bands to discard.
+
+  Both operate on the raw band count of the supplied HSI.
+
+- All cities pooled together in `select-bands` or `pca-fit` must have the same
+  resulting band count and compatible keep/remove ranges. Otherwise the same
+  band index can represent different wavelengths in different cities.
+
+Before defining band-trimming parameters, the raw band count can be inspected
+with:
+
+```python
+rasterio.open(path).count
+```
+
 
 ## Docker
 
-The image is built under its release-shaped name (registry namespace +
-versioned tag, matching the CWL's `dockerPull`), so local tests exercise the
-exact tag that will later be pushed to the registry:
+The processor image is built under the same registry name and version used by
+the CWL `DockerRequirement`:
 
 ```bash
-docker build -t ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1 .
+docker build \
+  -t ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1 \
+  .
+```
 
+A direct Docker run can use the bundled example data and configuration:
+
+```bash
 docker run --rm \
   -v "$(pwd)/examples:/app/examples" \
   -v "$(pwd)/data:/app/data" \
   -v /path/to/host/output:/app/output \
   ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1 \
-  run-all --config examples/run_all_config.yaml \
-          --input-catalog examples/stac_input/catalog.json \
-          --output-dir /app/output
+  python /app/processor.py run-all \
+    --config /app/examples/run_all_config_docker.yaml \
+    --input-catalog /app/examples/stac_input/catalog.json \
+    --output-dir /app/output
 ```
 
-The base image is plain `python:3.11-slim` (rasterio's pip wheels bundle
-GDAL; this repo doesn't need geopandas/fiona's system GDAL linkage) --
-see the Dockerfile for details.
+The repository is copied into `/app` when the image is built. Auxiliary
+processor resources that are part of the software package can therefore use
+paths inside the image, for example:
 
-> The image has since been built and exercised repeatedly through `cwltool`
-> runs (both standalone and as the `prep` step of `heatwise-lcz-pipeline`).
+```text
+/app/data/CHIME_v2_wavelengths_um.txt
+```
 
-## CWL
+EO input products are handled separately through the staged STAC input when
+the processor is executed as a CWL Application Package.
 
-`heatwise_hsi_lst_prep.cwl` describes the same `run-all` interface for CWL
-runners (inputs: `config` File, optional `input_catalog` File, `output_dir`
-string; outputs: `output_catalog` File + `output_directory` Directory).
-`examples/job.yaml` is a ready-to-use job order for the bundled sample data:
+
+## CWL / EO Application Package
+
+`heatwise_hsi_lst_prep.cwl` packages the preprocessing processor as a CWL v1.2
+EO Application Package.
+
+The CWL document contains:
+
+- a top-level `Workflow` with ID `main`, used as the application entry point;
+- a `CommandLineTool` with ID `hsi_lst_prep_processor`, which executes the
+  preprocessing code inside the versioned Docker image.
+
+The workflow inputs are:
+
+### `config`
+
+```text
+type: File
+```
+
+Run-level YAML configuration controlling the processing chain, including
+LST/PCA options, band-selection parameters, wavelength information and shared
+processing parameters.
+
+### `input_catalog`
+
+```text
+type: Directory
+```
+
+A staged EO input directory containing:
+
+```text
+catalog.json
+STAC Item JSON files
+EO raster assets referenced by the Items
+```
+
+For example:
+
+```text
+stac_input/
+├── catalog.json
+├── Berlin_item.json
+├── Berlin_CHIME.tif
+├── Berlin_S2.tif
+└── Berlin_LSTM.tif
+```
+
+The STAC catalog and Items use relative links to their associated files.
+
+The complete directory is staged by CWL, rather than staging `catalog.json` as
+an isolated `File`. The processor is then passed:
+
+```text
+<input_catalog>/catalog.json
+```
+
+through its `--input-catalog` argument.
+
+This means that Docker-specific STAC catalogs containing absolute `/app/...`
+asset paths are not required for CWL execution.
+
+Legacy files such as:
+
+```text
+catalog_docker.json
+Berlin_item_docker.json
+```
+
+may remain in the example directory for historical reference, but they are not
+used by the current CWL job.
+
+### `output_dir`
+
+```text
+type: string
+default: "."
+```
+
+Products are written directly into the CWL working directory by default.
+
+The `CommandLineTool` exposes the complete working directory as one CWL
+`Directory` output using:
+
+```yaml
+outputBinding:
+  glob: "."
+```
+
+This allows all generated files required for stage-out to be collected
+together, including the STAC catalog and its referenced products.
+
+A typical CWL output contains:
+
+```text
+01_trimmed/
+├── Berlin_trimmed.tif
+
+02_sharpened_10m/
+├── Berlin_trimmed_sharp10m.tif
+
+03_hsi_final/
+└── hsi_bs/
+    └── Berlin_hsi_bs.tif
+
+04_lst_final/
+├── Berlin_lst_final.tif
+└── Berlin_lst_final.json
+
+band_selection.json
+catalog.json
+Berlin_item.json
+shared_item.json
+```
+
+If PCA processing is enabled, the corresponding PCA products and model files
+are included as well.
+
+
+## CWL example
+
+`examples/job.yaml` provides a ready-to-use CWL job for the bundled Berlin
+sample:
+
+```yaml
+config:
+  class: File
+  path: run_all_config_docker.yaml
+
+input_catalog:
+  class: Directory
+  path: stac_input
+
+output_dir: "."
+```
+
+Run the example from the repository root with:
 
 ```bash
-cd examples && cwltool ../heatwise_hsi_lst_prep.cwl job.yaml
+cwltool \
+  --outdir cwl-output \
+  heatwise_hsi_lst_prep.cwl \
+  examples/job.yaml
 ```
 
-**Two variants of the example config/catalog exist, for two different
-execution modes** -- this tripped up the first real `cwltool` run, so it's
-worth being explicit:
+The CWL processor invokes:
 
-| | local / plain `python processor.py` | Docker / CWL (`cwltool`) |
-|---|---|---|
-| config | `examples/run_all_config.yaml` | `examples/run_all_config_docker.yaml` |
-| catalog | `examples/stac_input/catalog.json` (+ `Berlin_item.json`) | `examples/stac_input/catalog_docker.json` (+ `Berlin_item_docker.json`) |
-| paths inside them | relative (`./data/...`) | absolute (`/app/data/...`, `/app/examples/...`) |
+```text
+python /app/processor.py run-all
+```
 
-The reason: `cwltool` runs the container with **its own empty per-job working
-directory**, not the image's Dockerfile `WORKDIR /app` -- confirmed by an
-actual `cwltool` run failing with `python: can't open file '/<job-tmp>/processor.py'`
-when the CWL invoked a bare relative `processor.py`. So the CWL's
-`arguments` now reference `/app/processor.py` directly, and any path
-*inside* the config/catalog content must also be an absolute `/app/...`
-path pointing into the image (baked in via `COPY . .`), not a path relative
-to wherever `cwltool` happens to stage things.
+inside the Docker container and passes the staged STAC catalog as:
 
-This also killed the original plan of using `secondaryFiles` to bring the
-STAC item JSON and rasters along with a relative-href `catalog.json`:
-`cwltool` only stages the exact File given for an input, confirmed by an
-actual run where only `catalog.json` got mounted into the container, not its
-sibling `Berlin_item.json` or the `.tif` assets it pointed at. The
-`catalog_docker.json`/`Berlin_item_docker.json` pair sidesteps this
-entirely by using absolute hrefs, so `cwltool` never needs to stage anything
-beyond the one small `catalog_docker.json` file itself.
+```text
+--input-catalog <staged-input-directory>/catalog.json
+```
 
-`examples/job.yaml` is wired to the Docker/CWL variants; edit `--config`/
-`--input-catalog` directly if you want to test the local variants without
-Docker.
 
-> **Rebuild the image before testing this** if you already built it before
-> `run_all_config_docker.yaml`/`catalog_docker.json`/`Berlin_item_docker.json`
-> existed -- they need to be baked in via `COPY . .`:
-> `docker build -t ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1 .`
+## EOAP validation
+
+The bundled Berlin example has been tested end-to-end as an EO Application
+Package.
+
+The validation covers:
+
+```text
+CWL document validation
+        ↓
+Input STAC validation
+        ↓
+Docker image build
+        ↓
+CWL execution
+        ↓
+Output STAC validation
+        ↓
+Generated-product inspection
+```
+
+The current example successfully:
+
+- validates `heatwise_hsi_lst_prep.cwl` with `cwltool`;
+- validates the input `catalog.json` and its STAC Item with PySTAC;
+- builds the processor Docker image;
+- executes the Berlin sample through the CWL Workflow;
+- generates the preprocessing products and output STAC catalog;
+- validates the generated output STAC catalog and Items with PySTAC.
+
+
+## Automated validation
+
+The repository contains a GitHub Actions workflow at:
+
+```text
+.github/workflows/validate-cwl.yml
+```
+
+The workflow installs `cwltool` and PySTAC validation dependencies and performs:
+
+1. CWL validation.
+2. Input STAC validation.
+3. Processor Docker image build.
+4. End-to-end execution of `examples/job.yaml`.
+5. Output STAC validation.
+6. Listing of the generated products for inspection.
+
+The workflow can also be launched manually through GitHub Actions using
+`workflow_dispatch`.

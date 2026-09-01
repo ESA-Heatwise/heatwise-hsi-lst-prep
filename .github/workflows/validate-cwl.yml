@@ -1,0 +1,90 @@
+name: Validate and test CWL
+
+on:
+  push:
+    branches:
+      - eoap-compliance
+    paths:
+      - "heatwise_hsi_lst_prep.cwl"
+      - "Dockerfile"
+      - "processor.py"
+      - "requirements.txt"
+      - "src/**"
+      - "data/**"
+      - "examples/**"
+      - ".github/workflows/validate-cwl.yml"
+  workflow_dispatch:
+
+jobs:
+  validate-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install validation tools
+        run: python -m pip install --upgrade pip cwltool "pystac[validation]"
+
+      - name: Validate CWL
+        run: cwltool --validate heatwise_hsi_lst_prep.cwl
+
+      - name: Validate input STAC
+        run: |
+          python - <<'PY'
+          import pystac
+
+          catalog = pystac.Catalog.from_file(
+              "examples/stac_input/catalog.json"
+          )
+
+          catalog.validate_all()
+          print("Input STAC is valid.")
+          PY
+
+      - name: Build processor Docker image
+        run: |
+          docker build \
+            -t ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1 \
+            .
+
+      - name: Run CWL example
+        run: |
+          mkdir -p cwl-output
+          cwltool \
+            --outdir cwl-output \
+            heatwise_hsi_lst_prep.cwl \
+            examples/job.yaml
+
+      - name: Validate output STAC
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pystac
+
+          catalogs = list(Path("cwl-output").rglob("catalog.json"))
+
+          if not catalogs:
+              raise RuntimeError("No output catalog.json was generated")
+
+          for catalog_path in catalogs:
+              print(f"Validating {catalog_path}")
+              catalog = pystac.Catalog.from_file(str(catalog_path))
+              catalog.validate_all()
+
+          print("Output STAC is valid.")
+          PY
+
+      - name: Show generated outputs
+        if: always()
+        run: |
+          echo "=== Generated files ==="
+          find cwl-output -maxdepth 5 -type f -print | sort || true
+
+          echo "=== STAC catalogs ==="
+          find cwl-output -name catalog.json -print || true
