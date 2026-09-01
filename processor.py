@@ -441,9 +441,15 @@ def run_pipeline(cfg: dict) -> None:
 
         items[name] = assets
 
+    item_metadata = {
+        city["name"]: city.get("stac_metadata", {})
+        for city in cities
+    }
+
     write_output_catalog(
         output_dir,
         items,
+        item_metadata=item_metadata,
     )
 
     print(
