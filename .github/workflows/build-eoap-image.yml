@@ -1,0 +1,51 @@
+name: Build EOAP test image
+
+on:
+  push:
+    branches:
+      - eoap-compliance
+    paths:
+      - "Dockerfile"
+      - "processor.py"
+      - "requirements.txt"
+      - "src/**"
+      - ".github/workflows/build-eoap-image.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            docker login ghcr.io \
+              -u "${{ github.actor }}" \
+              --password-stdin
+
+      - name: Build EOAP test image
+        run: |
+          docker build \
+            -t ghcr.io/esa-heatwise/heatwise-hsi-lst-prep:eoap-compliance \
+            .
+
+      - name: Verify EOAP interface
+        run: |
+          docker run --rm \
+            ghcr.io/esa-heatwise/heatwise-hsi-lst-prep:eoap-compliance \
+            python /app/processor.py run-all --help \
+            | grep -- "--input-catalog"
+
+      - name: Push EOAP test image
+        run: |
+          docker push \
+            ghcr.io/esa-heatwise/heatwise-hsi-lst-prep:eoap-compliance
