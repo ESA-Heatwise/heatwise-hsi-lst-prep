@@ -24,7 +24,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-STAC_VERSION = "1.0.0"
+STAC_VERSION = "1.1.0"
 
 _MEDIA_TYPES = {
     ".tif": "image/tiff; application=geotiff",
