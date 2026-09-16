@@ -94,7 +94,7 @@ $graph:
     requirements:
 
       DockerRequirement:
-        dockerPull: ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1
+        dockerPull: ghcr.io/esa-heatwise/heatwise-hsi-lst-prep:eoap-compliance
 
       InlineJavascriptRequirement: {}
 

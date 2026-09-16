@@ -50,7 +50,7 @@ jobs:
       - name: Build processor Docker image
         run: |
           docker build \
-            -t ghcr.io/heatwise-lcz/heatwise-hsi-lst-prep:0.1.1 \
+            -t ghcr.io/esa-heatwise/heatwise-hsi-lst-prep:eoap-compliance \
             .
 
       - name: Run CWL example
