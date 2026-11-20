@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version without v (e.g. 1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Create as pre-release'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref_name }}-${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/esa-heatwise/heatwise-hsi-lst-prep
+  INPUT_CWL: heatwise_hsi_lst_prep.cwl
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Determine and validate release version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            version="$INPUT_VERSION"
+          else
+            version="${REF_NAME#v}"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version: $version; expected MAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Generate versioned CWL
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import re
+          p = Path(os.environ['INPUT_CWL'])
+          content = p.read_text(encoding='utf-8')
+          version = os.environ['VERSION']
+          image = f"{os.environ['IMAGE_NAME']}:{version}"
+          patterns = (
+              (r'(?m)^\s*dockerPull:\s*\S+\s*$', f'        dockerPull: {image}'),
+              (r'(?m)^s:softwareVersion:\s*\S+\s*$', f's:softwareVersion: {version}'),
+              (r'(?m)^s:version:\s*\S+\s*$', f's:version: {version}'),
+          )
+          for pattern, replacement in patterns:
+              content, count = re.subn(pattern, replacement, content)
+              if count != 1:
+                  raise RuntimeError(f'Expected exactly one occurrence of {pattern!r}; found {count}')
+          Path('/tmp/heatwise_hsi_lst_prep.cwl').write_text(content, encoding='utf-8')
+          print(f'Created versioned CWL with Docker image {image}')
+          PY
+
+      - name: Validate versioned CWL
+        run: |
+          python -m pip install --disable-pip-version-check cwltool
+          cwltool --validate /tmp/heatwise_hsi_lst_prep.cwl
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and publish versioned image
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          image="${IMAGE_NAME}:${VERSION}"
+          docker build --label "org.opencontainers.image.source=https://github.com/ESA-Heatwise/heatwise-hsi-lst-prep" -t "$image" .
+          docker run --rm "$image" python /app/processor.py run-all --help | grep -- '--input-catalog'
+          docker push "$image"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ inputs.prerelease || false }}
+          generate_release_notes: true
+          files: |
+            /tmp/heatwise_hsi_lst_prep.cwl
+            README.md
+            LICENSE
